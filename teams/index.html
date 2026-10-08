@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DDX Bot Teams</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<style>
+  /* One card per team: scan the QR on the robot's phone. Prints 3×4 on A4. */
+  :root {
+    --bg: #f4f4f2;
+    --card: #ffffff;
+    --fg: #161616;
+    --muted: #6b6b68;
+    --line: #dcdcd8;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111; --card: #1c1c1c; --fg: #e8e8e6; --muted: #9a9a96; --line: #333; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--sans); padding: 32px 16px; }
+  header, main { max-width: 960px; margin: 0 auto; }
+  header { display: grid; gap: 6px; margin-bottom: 24px; }
+  h1 { font: 700 28px/1.1 var(--mono); letter-spacing: -0.02em; }
+  header p { color: var(--muted); max-width: 60ch; line-height: 1.5; }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px; display: grid; gap: 10px; justify-items: center; text-align: center;
+    break-inside: avoid;
+  }
+  .card h2 { font: 700 20px var(--mono); }
+  .qr { width: 160px; aspect-ratio: 1; max-width: 100%; background: #fff; padding: 8px; border-radius: 4px; }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  .card a { font: 12px var(--mono); color: var(--muted); word-break: break-all; }
+  @media print {
+    :root { --bg: #fff; --card: #fff; --fg: #000; --muted: #444; --line: #bbb; color-scheme: light; }
+    body { padding: 0; }
+    header p { display: none; }
+    header { margin-bottom: 8mm; }
+    main { grid-template-columns: repeat(3, 1fr); gap: 6mm; }
+    .qr { width: 42mm; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>DDX Bot · team faces</h1>
+  <p>Scan your team's code on the phone that goes inside your robot, then Add to Home Screen.
+     It shows Plain Bot until your own face is published. After that, reload.</p>
+</header>
+<main id="cards"></main>
+<script>
+  const base = new URL("../", location.href).href;
+  const cards = document.getElementById("cards");
+  for (let n = 1; n <= 12; n++) {
+    const url = `${base}team-${n}/`;
+    const qr = qrcode(0, "M");
+    qr.addData(url); qr.make();
+    const card = document.createElement("section");
+    card.className = "card";
+    card.innerHTML = `<h2>Team ${n}</h2>
+      <div class="qr">${qr.createSvgTag({ scalable: true, margin: 0 })}</div>
+      <a href="${url}">${url.replace(/^https?:\/\//, "")}</a>`;
+    cards.append(card);
+  }
+</script>
+</body>
+</html>

@@ -22,6 +22,33 @@ For your own demo phone, host the file once, somewhere simple:
 iPhone: *Share → Add to Home Screen* opens it with no Safari UI, which is the cleanest face.
 Also turn off auto-lock, or rely on the page's Wake Lock.
 
+## Team slots and the deploy desk
+
+There are 12 team URLs, `daresaydigital.github.io/ddx-bot/team-1/` … `team-12/`.
+Each one shows Plain Bot (labelled with the team number) until a team's own face is published there.
+The overview page with a QR code per team (it prints 3×4 on A4) is at
+**daresaydigital.github.io/ddx-bot/teams/**.
+
+At the start, every team scans its QR code on the robot's phone and adds it to the home screen.
+Later, they only need to reload.
+
+Teams never touch GitHub. To get a team's face live:
+
+1. The team shares its Claude artifact with Robert **with edit access** and sends the link.
+   (Fallback: they download or copy the code and send the file.)
+2. Robert gives the link to Claude Code ("publish to team 3"), or saves the file and runs:
+
+   ```bash
+   ./deploy.sh 3 ~/Downloads/robot.html
+   ```
+
+3. It's live in about a minute. The team reloads the phone.
+
+`./deploy.sh 3 --reset` puts Plain Bot back for one team, `./deploy.sh all --reset` for all teams.
+The script adds the phone viewport tag when artifact code lacks one, so the face doesn't render tiny.
+
+Figma teams skip the desk and play their prototype full screen in the Figma app.
+
 ## Prompt card for teams
 
 > Here is a starter HTML file for a robot face that runs full screen on a phone
