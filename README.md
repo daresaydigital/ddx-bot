@@ -44,6 +44,13 @@ Teams never touch GitHub. To get a team's face live:
 
 3. It's live in about a minute. The team reloads the phone.
 
+If the team's prototype is already hosted (Lovable, Figma Make, a Figma prototype link…), skip the file
+and redirect the team URL to it:
+
+```bash
+./deploy.sh 3 https://something.lovable.app
+```
+
 `./deploy.sh 3 --reset` puts Plain Bot back for one team, `./deploy.sh all --reset` for all teams.
 The script adds the phone viewport tag when artifact code lacks one, so the face doesn't render tiny.
 

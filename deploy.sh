@@ -3,6 +3,7 @@
 #   https://daresaydigital.github.io/ddx-bot/team-N/
 #
 #   ./deploy.sh 3 ~/Downloads/robot.html   # publish a team's HTML file
+#   ./deploy.sh 3 https://xyz.lovable.app   # redirect to an already-hosted prototype
 #   ./deploy.sh 3 --reset                  # back to Plain Bot
 #   ./deploy.sh all --reset                # reset all 12 teams
 #
@@ -15,7 +16,7 @@ cd "$(dirname "$0")"
 TEAMS=12
 URL="https://daresaydigital.github.io/ddx-bot"
 
-usage() { sed -n '4,7p' "$0" | sed 's/^# *//'; exit 1; }
+usage() { sed -n '4,8p' "$0" | sed 's/^# *//'; exit 1; }
 [ $# -eq 2 ] || usage
 
 plain_bot() { # $1 = team number
@@ -28,6 +29,20 @@ publish() { # $1 = team number, $2 = source file or --reset
   mkdir -p "team-$n"
   if [ "$src" = "--reset" ]; then
     plain_bot "$n" > "$dest"
+  elif [[ "$src" =~ ^https?:// ]]; then
+    python3 - "$src" "$dest" "$n" <<'EOF'
+import html, json, sys
+url, dest, n = sys.argv[1:]
+open(dest, "w", encoding="utf-8").write(f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="0; url={html.escape(url)}">
+<title>Team {n}</title>
+<script>location.replace({json.dumps(url)})</script>
+<style>body{{margin:0;background:#000;color:#888;font:14px ui-monospace,monospace;display:grid;place-items:center;height:100vh}}a{{color:#ccc}}</style>
+</head><body><a href="{html.escape(url)}">Team {n} →</a></body></html>
+""")
+EOF
   else
     [ -f "$src" ] || { echo "No such file: $src"; exit 1; }
     python3 - "$src" "$dest" <<'EOF'
