@@ -51,7 +51,14 @@ and redirect the team URL to it:
 ./deploy.sh 3 https://something.lovable.app
 ```
 
-`./deploy.sh 3 --reset` puts Plain Bot back for one team, `./deploy.sh all --reset` for all teams.
+**Several surfaces per robot:** the team URL is surface 1. Extra phones use `team-3/2/`, `team-3/3/` (up to 9).
+Surfaces 2 and 3 already show Plain Bot for every team; the overview page shows their QR codes under "+ more surfaces".
+
+```bash
+./deploy.sh 3/2 ~/Downloads/chest.html
+```
+
+`./deploy.sh 3 --reset` puts Plain Bot back for one team, `./deploy.sh all --reset` for all teams (and removes surfaces 4–9).
 The script adds the phone viewport tag when artifact code lacks one, so the face doesn't render tiny.
 
 Figma teams skip the desk and play their prototype full screen in the Figma app.

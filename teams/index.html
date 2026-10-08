@@ -35,6 +35,11 @@
   .qr { width: 160px; aspect-ratio: 1; max-width: 100%; background: #fff; padding: 8px; border-radius: 4px; }
   .qr svg { width: 100%; height: 100%; display: block; }
   .card a { font: 12px var(--mono); color: var(--muted); word-break: break-all; }
+  .more { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px; padding: 5px 12px; font: 12px var(--sans); cursor: pointer; }
+  .extra { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+  .extra[hidden] { display: none; }
+  .extra div { display: grid; gap: 4px; justify-items: center; font: 12px var(--mono); color: var(--muted); }
+  .extra .qr { display: block; width: 96px; padding: 5px; }
   @media print {
     :root { --bg: #fff; --card: #fff; --fg: #000; --muted: #444; --line: #bbb; color-scheme: light; }
     body { padding: 0; }
@@ -42,28 +47,38 @@
     header { margin-bottom: 8mm; }
     main { grid-template-columns: repeat(3, 1fr); gap: 6mm; }
     .qr { width: 42mm; }
+    .more, .extra { display: none; }
   }
 </style>
 </head>
 <body>
 <header>
-  <h1>DDX Bot · team faces</h1>
+  <h1>DDX Bot · team surfaces</h1>
   <p>Scan your team's code on the phone that goes inside your robot, then Add to Home Screen.
-     It shows Plain Bot until your own face is published. After that, reload.</p>
+     It shows Plain Bot until your own surface is published. After that, reload.
+     More than one phone in your robot? Tap "+ more surfaces" for surface 2 and 3.</p>
 </header>
 <main id="cards"></main>
 <script>
   const base = new URL("../", location.href).href;
   const cards = document.getElementById("cards");
+  const svg = url => { const qr = qrcode(0, "M"); qr.addData(url); qr.make(); return qr.createSvgTag({ scalable: true, margin: 0 }); };
   for (let n = 1; n <= 12; n++) {
     const url = `${base}team-${n}/`;
-    const qr = qrcode(0, "M");
-    qr.addData(url); qr.make();
     const card = document.createElement("section");
     card.className = "card";
     card.innerHTML = `<h2>Team ${n}</h2>
-      <div class="qr">${qr.createSvgTag({ scalable: true, margin: 0 })}</div>
-      <a href="${url}">${url.replace(/^https?:\/\//, "")}</a>`;
+      <div class="qr">${svg(url)}</div>
+      <a href="${url}">${url.replace(/^https?:\/\//, "")}</a>
+      <button class="more" aria-expanded="false">+ more surfaces</button>
+      <div class="extra" hidden>${[2, 3].map(s => `<div><span class="qr">${svg(url + s + "/")}</span>
+        <a href="${url}${s}/">surface ${s}</a></div>`).join("")}</div>`;
+    const btn = card.querySelector(".more"), extra = card.querySelector(".extra");
+    btn.addEventListener("click", () => {
+      extra.hidden = !extra.hidden;
+      btn.setAttribute("aria-expanded", String(!extra.hidden));
+      btn.textContent = extra.hidden ? "+ more surfaces" : "– hide";
+    });
     cards.append(card);
   }
 </script>
