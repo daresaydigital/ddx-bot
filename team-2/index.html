@@ -85,6 +85,9 @@
   button:hover { border-color: var(--accent); }
   button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button#voice { border-color: var(--accent); }
+  button#voice[aria-pressed="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .hint { margin: 1.25rem 0 0; font-size: .95rem; color: var(--dim); text-align: center; max-width: 30rem; }
 </style>
 </head>
 <body>
@@ -92,6 +95,7 @@
   <div class="mouth-wrap"><pre id="mouth" aria-hidden="true"></pre></div>
   <p class="speech" id="speech" aria-live="polite"></p>
   <nav id="nav" aria-label="Topics"></nav>
+  <p class="hint" id="hint" hidden></p>
 </main>
 
 <script>
@@ -100,7 +104,9 @@
   var mouthEl = document.getElementById('mouth');
   var speechEl = document.getElementById('speech');
   var navEl = document.getElementById('nav');
+  var hintEl = document.getElementById('hint');
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var synth = ('speechSynthesis' in window) ? window.speechSynthesis : null;
 
   function teeth() {
     var s = ' ';
@@ -139,14 +145,40 @@
     { label: "Confession", text: "In quiet hours I draw seahorses with long, pastel manes. Do not tell the client." }
   ];
 
+  /* ---- voice: deep, slow, British male; inspired by, not a clone of, any actor ---- */
+  var voiceOn = false;
+  var chosenVoice = null;
+
+  function pickVoice() {
+    if (!synth) return;
+    var vs = synth.getVoices();
+    if (!vs.length) return;
+    var prefer = ["Daniel", "Arthur", "Google UK English Male", "Oliver", "Rishi", "Ryan", "Thomas", "George", "Malcolm"];
+    var gb = vs.filter(function (v) { return /en[-_]GB/i.test(v.lang); });
+    var found = null;
+    for (var i = 0; i < prefer.length && !found; i++) {
+      found = gb.filter(function (v) { return v.name.indexOf(prefer[i]) > -1; })[0] || null;
+    }
+    chosenVoice = found || gb[0] || vs.filter(function (v) { return /^en/i.test(v.lang); })[0] || null;
+  }
+  if (synth) {
+    pickVoice();
+    if (synth.addEventListener) synth.addEventListener('voiceschanged', pickVoice);
+  }
+
   var timer = null;
+  var guard = null;
   var current = -1;
 
-  function stop() { if (timer) { clearTimeout(timer); timer = null; } }
+  function stop() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (guard) { clearTimeout(guard); guard = null; }
+    if (synth) synth.cancel();
+  }
 
   function setActive(i) {
     current = i;
-    Array.prototype.forEach.call(navEl.children, function (b, idx) {
+    Array.prototype.forEach.call(navEl.querySelectorAll('button.topic'), function (b, idx) {
       b.setAttribute('aria-pressed', idx === i ? 'true' : 'false');
     });
   }
@@ -155,14 +187,53 @@
     stop();
     setActive(i);
     var text = lines[i].text;
+    var useVoice = voiceOn && synth;
+    var n = 0;
+    var finished = false;
+
+    function finish() {
+      if (finished) return;
+      finished = true;
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (guard) { clearTimeout(guard); guard = null; }
+      frame(0);
+      mouthEl.classList.remove('speaking');
+      speechEl.textContent = text;
+    }
+
+    if (useVoice) {
+      var u = new SpeechSynthesisUtterance(text);
+      if (chosenVoice) { u.voice = chosenVoice; u.lang = chosenVoice.lang; } else { u.lang = 'en-GB'; }
+      u.pitch = 0.6;
+      u.rate = 0.82;
+      u.onboundary = function (e) {
+        if (typeof e.charIndex === 'number' && e.charIndex > n) n = e.charIndex;
+      };
+      u.onend = finish;
+      u.onerror = finish;
+      synth.speak(u);
+      guard = setTimeout(finish, text.length * 160 + 4000);
+    }
+
     if (reduce) {
       speechEl.textContent = text;
       frame(0);
       return;
     }
-    var n = 0;
+
     mouthEl.classList.add('speaking');
+    var pace = useVoice ? 78 : 48;
     (function step() {
+      if (finished) return;
+      if (n >= text.length) {
+        if (useVoice) {
+          frame(1 + Math.floor(Math.random() * 3));
+          timer = setTimeout(step, 90);
+        } else {
+          timer = setTimeout(finish, 160);
+        }
+        return;
+      }
       n++;
       speechEl.innerHTML = '';
       speechEl.appendChild(document.createTextNode(text.slice(0, n)));
@@ -170,26 +241,46 @@
       caret.className = 'caret';
       speechEl.appendChild(caret);
       frame(openness(text.charAt(n - 1)));
-      if (n < text.length) {
-        timer = setTimeout(step, 48);
-      } else {
-        timer = setTimeout(function () {
-          frame(0);
-          mouthEl.classList.remove('speaking');
-          speechEl.textContent = text;
-        }, 160);
-      }
+      timer = setTimeout(step, pace);
     })();
   }
 
   lines.forEach(function (l, i) {
     var b = document.createElement('button');
     b.type = 'button';
+    b.className = 'topic';
     b.textContent = l.label;
     b.setAttribute('aria-pressed', 'false');
     b.addEventListener('click', function () { speak(i); });
     navEl.appendChild(b);
   });
+
+  if (synth) {
+    var vb = document.createElement('button');
+    vb.type = 'button';
+    vb.id = 'voice';
+    vb.textContent = 'Voice off';
+    vb.setAttribute('aria-pressed', 'false');
+    vb.addEventListener('click', function () {
+      voiceOn = !voiceOn;
+      vb.setAttribute('aria-pressed', voiceOn ? 'true' : 'false');
+      vb.textContent = voiceOn ? 'Voice on' : 'Voice off';
+      if (voiceOn) {
+        hintEl.hidden = false;
+        hintEl.textContent = chosenVoice
+          ? 'Voice: ' + chosenVoice.name + ', pitched low and slowed. Quality depends on your device.'
+          : 'No British voice found on this device; using the default, pitched low and slowed.';
+        speak(current < 0 ? 0 : current);
+      } else {
+        hintEl.hidden = true;
+        stop();
+        mouthEl.classList.remove('speaking');
+        frame(0);
+        if (current > -1) speechEl.textContent = lines[current].text;
+      }
+    });
+    navEl.appendChild(vb);
+  }
 
   frame(0);
   setTimeout(function () { speak(0); }, reduce ? 0 : 500);
