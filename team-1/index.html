@@ -3,6 +3,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mother">
 <meta name="theme-color" content="#000000">
 <title>The Mother</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -61,6 +64,19 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   max-width: 34em; margin: 0 auto; overflow-wrap: anywhere; text-wrap: balance;
 }
 
+.ptt {
+  position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  width: 76px; height: 76px; border-radius: 50%; cursor: pointer;
+  border: 2px solid var(--amber-soft); background: radial-gradient(circle, #2a1d0c, #0d0904);
+  color: var(--amber); font: 600 11px var(--font); letter-spacing: .1em; text-transform: uppercase;
+  touch-action: none; -webkit-touch-callout: none; transition: transform .12s, box-shadow .2s, background .2s;
+}
+.ptt[data-held="true"] {
+  transform: translateX(-50%) scale(1.1); background: radial-gradient(circle, #ffcf6a, #c9861f);
+  color: #1a1206; box-shadow: 0 0 32px rgba(255,180,58,.7);
+}
+body.has-ptt .captions { bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
+body.has-ptt.typing .ptt { display: none; }
 .typebox {
   position: absolute; left: 16px; right: 16px; bottom: 16px;
   display: grid; grid-template-columns: 1fr auto; gap: 8px; max-width: 560px; margin: 0 auto;
@@ -105,6 +121,10 @@ body.typing .captions { bottom: 76px; }
 .mode { font-size: 12px; color: var(--amber-soft); letter-spacing: .06em; text-transform: uppercase; }
 
 @media (prefers-reduced-motion: reduce) { .wake span { animation: none; } }
+/* Eyes only: no text on screen. Settings still open from an invisible button in the top-right corner. */
+.typebox, .captions, .status { display: none !important; }
+.gear { opacity: 0; width: 72px; height: 72px; top: 0; right: 0; }
+.gear:focus-visible { opacity: 1; }
 </style>
 </head><body>
 
@@ -118,6 +138,8 @@ body.typing .captions { bottom: 76px; }
     <div class="heard" id="heard"></div>
     <div class="said" id="said"></div>
   </div>
+
+  <button class="ptt" id="ptt" type="button" hidden aria-label="Hold to talk">Hold</button>
 
   <form class="typebox" id="typebox" hidden>
     <label for="typed" hidden>Say something to The Mother</label>
@@ -144,6 +166,8 @@ body.typing .captions { bottom: 76px; }
       <p>Needed when the owl runs on its own in Chrome, outside Claude. The key is stored only in this phone's browser. Use a key with a spending limit, and don't share this phone's browser profile.</p>
     </div>
 
+    <label class="check"><input type="checkbox" id="pttMode"> Push to talk (hold the button while you speak)</label>
+    <p>Off: she's always listening. On: the mic only listens while you hold the button.</p>
     <label class="check"><input type="checkbox" id="wakeWord"> Only answer after a wake word</label>
     <div class="row">
       <label for="wakePhrase">Wake word</label>
@@ -222,6 +246,7 @@ Start every reply with exactly one tag that sets your eyes, then a space, then w
     provider: store.get("key", "") ? store.get("provider", "openai") : "openai",
     model: store.get("model", ""),
     wake: store.get("wake", "0") === "1",
+    ptt: store.get("pttmode", "0") === "1",
     phrase: store.get("phrase", "mother"),
     lang: store.get("lang", "en-US"),
     voice: store.get("voice", ""),
@@ -498,7 +523,12 @@ Start every reply with exactly one tag that sets your eyes, then a space, then w
         u.lang = S.lang; u.rate = 1; u.pitch = 1.05;
         let done = false; const finish = () => { if (!done) { done = true; resolve(); } };
         u.onboundary = () => { boundaryPulse = 1; };
-        u.onend = finish; u.onerror = finish;
+        // Desktop Chrome cuts long speech off after ~15 s; a pause/resume nudge keeps it going.
+        const nudge = /Android/i.test(navigator.userAgent) ? null : setInterval(() => {
+          try { if (speechSynthesis.speaking) { speechSynthesis.pause(); speechSynthesis.resume(); } } catch (e) {}
+        }, 10000);
+        const finish2 = finish;
+        u.onend = u.onerror = () => { if (nudge) clearInterval(nudge); finish2(); };
         speechSynthesis.speak(u);
         setTimeout(finish, 4000 + text.length * 90);   // safety net if onend never fires
       } catch (e) { resolve(); }
@@ -509,14 +539,20 @@ Start every reply with exactly one tag that sets your eyes, then a space, then w
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   let rec = null, awake = false, busy = false, micBlocked = !SR, convoUntil = 0;
 
+  let pttHeld = false;
   function listen() {
     if (!awake || busy || micBlocked) return;
-    const waiting = S.wake && Date.now() > convoUntil;
+    if (S.ptt && !pttHeld) { setState("dozing", "Hold the button to talk"); return; }
+    if (rec) return;
+    const waiting = !S.ptt && S.wake && Date.now() > convoUntil;
     setState(waiting ? "dozing" : "listening");
+    const started = Date.now();
+    let gotSomething = false, lastError = "";
     try {
       rec = new SR();
-      rec.lang = S.lang; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+      rec.lang = S.lang; rec.interimResults = true; rec.continuous = S.ptt; rec.maxAlternatives = 1;
       let finalText = "";
+      rec.onaudiostart = () => { gotSomething = true; };
       rec.onspeechstart = () => { if (!(S.wake && Date.now() > convoUntil)) setState("hearing"); };
       rec.onresult = (e) => {
         let interim = "";
@@ -527,22 +563,54 @@ Start every reply with exactly one tag that sets your eyes, then a space, then w
         if (S.caps) heardEl.textContent = (finalText + interim).trim();
       };
       rec.onerror = (e) => {
+        lastError = e.error || "";
         if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") blockMic();
       };
+      const me = rec;
       rec.onend = () => {
+        if (rec !== me) return;   // an older, aborted session finishing late
         rec = null;
         const said = finalText.trim();
-        if (said) handleHeard(said);
-        else if (awake && !busy && !micBlocked) setTimeout(listen, 200);
+        // Back off if sessions keep dying instantly (network hiccup, mic busy), so we never spin.
+        if (said || gotSomething || Date.now() - started > 1500) quickFails = 0; else quickFails++;
+        if (said) { handleHeard(said); return; }
+        if (S.ptt) { if (!pttHeld) setState("dozing", "Hold the button to talk"); else setTimeout(listen, 150); return; }
+        if (awake && !busy && !micBlocked) {
+          const delay = lastError === "network" ? 2000 : Math.min(4000, 150 * Math.pow(2, quickFails));
+          setTimeout(listen, delay);
+        }
       };
       rec.start();
-    } catch (e) { blockMic(); }
+    } catch (e) {
+      // "already started" and similar: drop this session and let the watchdog try again.
+      rec = null;
+    }
+  }
+  let quickFails = 0;
+
+  // Watchdog: if listening ever silently stops, start it again.
+  setInterval(() => {
+    if (awake && !busy && !rec && !micBlocked && !S.ptt && sheet.hidden && document.visibilityState === "visible") listen();
+  }, 4000);
+  window.addEventListener("online", () => { quickFails = 0; if (awake && !busy && !rec) listen(); });
+
+  // Ask for the microphone once up front, so Chrome shows its prompt at wake-up
+  // and remembers the answer for this site.
+  async function primeMic() {
+    if (micBlocked || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    try {
+      const st = await navigator.mediaDevices.getUserMedia({ audio: true });
+      st.getTracks().forEach(t => t.stop());
+    } catch (e) {
+      if (e && (e.name === "NotAllowedError" || e.name === "SecurityError" || e.name === "NotFoundError")) blockMic();
+    }
   }
   function blockMic() {
     if (micBlocked && !typebox.hidden) return;
     micBlocked = true; rec = null;
     typebox.hidden = false; document.body.classList.add("typing");
     setState("listening", "Use your keyboard's mic to talk");
+    paintPtt();
   }
   function matchWake(text) {
     const p = S.phrase.trim().toLowerCase();
@@ -552,7 +620,7 @@ Start every reply with exactly one tag that sets your eyes, then a space, then w
     return text.slice(i + p.length).replace(/^[\s,.!?]+/, "");
   }
   function handleHeard(text) {
-    if (S.wake && Date.now() > convoUntil) {
+    if (!S.ptt && S.wake && Date.now() > convoUntil) {
       const rest = matchWake(text);
       if (rest === null) { setTimeout(listen, 150); return; }
       if (!rest) { reply("[warm] Yes, love? I'm listening."); return; }
@@ -609,8 +677,38 @@ Start every reply with exactly one tag that sets your eyes, then a space, then w
     if (document.visibilityState === "visible" && awake) { keepAwake(); if (!busy && !rec) listen(); }
   });
 
+  /* ---------- Push to talk ---------- */
+  const pttBtn = $("ptt");
+  function paintPtt() {
+    pttBtn.hidden = !(awake && (S.ptt || micBlocked));
+    document.body.classList.toggle("has-ptt", !pttBtn.hidden);
+    pttBtn.textContent = micBlocked ? "Talk" : "Hold";
+  }
+  function pttDown(e) {
+    e.preventDefault();
+    if (micBlocked) { typebox.hidden = false; document.body.classList.add("typing"); typed.focus(); return; }
+    if (busy) return;
+    pttHeld = true; pttBtn.dataset.held = "true";
+    if (rec) try { rec.abort(); } catch (err) {}
+    rec = null; heardEl.textContent = "";
+    listen();
+  }
+  function pttUp() {
+    if (!pttHeld) return;
+    pttHeld = false; pttBtn.dataset.held = "false";
+    if (rec) try { rec.stop(); } catch (err) {}
+  }
+  pttBtn.addEventListener("pointerdown", pttDown);
+  pttBtn.addEventListener("pointerup", pttUp);
+  pttBtn.addEventListener("pointercancel", pttUp);
+  pttBtn.addEventListener("pointerleave", pttUp);
+  pttBtn.addEventListener("contextmenu", (e) => e.preventDefault());
+  pttBtn.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) pttDown(e); });
+  pttBtn.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") pttUp(); });
+
   wakeBtn.addEventListener("click", async () => {
-    wakeBtn.hidden = true; awake = true;
+    wakeBtn.hidden = true; awake = true; paintPtt();
+    primeMic();
     try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {}
     keepAwake();
     await sampleReady;
@@ -656,7 +754,7 @@ Start every reply with exactly one tag that sets your eyes, then a space, then w
   function openSheet() {
     paintMode();
     $("provider").value = S.provider; $("model").value = S.model; paintProvider();
-    $("apiKey").value = S.key; $("wakeWord").checked = S.wake; $("wakePhrase").value = S.phrase;
+    $("apiKey").value = S.key; $("wakeWord").checked = S.wake; $("pttMode").checked = S.ptt; $("wakePhrase").value = S.phrase;
     $("lang").value = S.lang; $("caps").checked = S.caps; loadVoices();
     sheet.hidden = false;
     if (rec) try { rec.abort(); } catch (e) {}
@@ -664,6 +762,7 @@ Start every reply with exactly one tag that sets your eyes, then a space, then w
   function closeSheet() {
     S.key = $("apiKey").value.trim(); S.wake = $("wakeWord").checked;
     S.provider = $("provider").value; S.model = $("model").value.trim();
+    S.ptt = $("pttMode").checked; store.set("pttmode", S.ptt ? "1" : "0"); paintPtt();
     store.set("provider", S.provider); store.set("model", S.model);
     S.phrase = $("wakePhrase").value.trim() || "mother"; S.lang = $("lang").value;
     S.voice = $("voice").value; S.caps = $("caps").checked;
