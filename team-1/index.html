@@ -1,247 +1,692 @@
 <!doctype html>
-<html lang="en">
-<head>
+<html lang="en"><head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#000000">
-<title>Plain Bot</title>
+<title>The Mother</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&display=swap">
 <style>
-  /* ============================================================
-     DDX BOT — STARTER FACE
-     Everything you probably want to change is in the BOT config
-     in the <script> below. Styling lives here.
-     ============================================================ */
-  :root {
-    --bg: #000;
-    --fg: #d8d8d8;
-    --dim: #555;
-    --font: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body {
-    height: 100%;
-    background: var(--bg);
-    color: var(--fg);
-    overflow: hidden;
-    overscroll-behavior: none;
-    -webkit-user-select: none; user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-  body {
-    display: grid;
-    place-items: center;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right)
-             env(safe-area-inset-bottom) env(safe-area-inset-left);
-    cursor: pointer;
-  }
-  #screen {
-    font-family: var(--font);
-    line-height: 1.15;
-    white-space: pre;
-    letter-spacing: 0;
-  }
-  #hint {
-    position: fixed; left: 0; right: 0; bottom: max(12px, env(safe-area-inset-bottom));
-    text-align: center; font: 12px var(--font); color: var(--dim);
-    transition: opacity .6s;
-  }
+/* Layout: a black, full-screen "owl face". Two glowing eyes on a canvas are the whole interface.
+   Status sits dim at the top, captions dim at the bottom, settings hide behind a corner button.
+   Deliberately single dark theme: the screen sits behind a physical owl, only the eyes should show. */
+:root {
+  --night: #000000;
+  --dim: #6b5a3f;       /* amber at low light, for quiet text */
+  --amber: #ffb43a;
+  --amber-soft: #c98a2a;
+  --panel: #120e09;
+  --panel-line: #2c2216;
+  --text: #f3e6cf;
+  --bad: #ff6b4a;
+  --font: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--night); color: var(--text); font-family: var(--font);
+  overflow: hidden; -webkit-user-select: none; user-select: none;
+}
+.owl { position: relative; height: 100%; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.status {
+  position: absolute; top: 12px; left: 16px; right: 64px;
+  font: 500 12px var(--font); letter-spacing: .14em; text-transform: uppercase; color: var(--dim);
+  display: flex; align-items: center; gap: 8px; pointer-events: none;
+}
+.status i { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); flex: none; transition: background .3s; }
+.status[data-s="listening"] i, .status[data-s="hearing"] i { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+.status[data-s="thinking"] i { background: var(--amber-soft); }
+.status[data-s="talking"] i { background: #ffe08a; box-shadow: 0 0 8px #ffe08a; }
+.status[data-s="error"] i { background: var(--bad); }
+
+.gear {
+  position: absolute; top: 4px; right: 8px; width: 44px; height: 44px;
+  border: 0; background: transparent; color: var(--dim); cursor: pointer;
+  font-size: 22px; line-height: 1; border-radius: 50%;
+}
+.gear:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+.captions {
+  position: absolute; left: 16px; right: 16px; bottom: 18px;
+  display: grid; gap: 6px; text-align: center; pointer-events: none;
+}
+.captions .heard { font-size: 13px; color: var(--dim); min-height: 1.3em; overflow-wrap: anywhere; }
+.captions .said {
+  font-size: 16px; line-height: 1.45; color: var(--text); opacity: .85;
+  max-width: 34em; margin: 0 auto; overflow-wrap: anywhere; text-wrap: balance;
+}
+
+.typebox {
+  position: absolute; left: 16px; right: 16px; bottom: 16px;
+  display: grid; grid-template-columns: 1fr auto; gap: 8px; max-width: 560px; margin: 0 auto;
+}
+.typebox input {
+  font: 15px var(--font); color: var(--text); background: var(--panel);
+  border: 1px solid var(--panel-line); border-radius: 12px; padding: 10px 12px; min-width: 0;
+  -webkit-user-select: text; user-select: text;
+}
+.btn {
+  font: 600 14px var(--font); color: #1a1206; background: var(--amber);
+  border: 0; border-radius: 12px; padding: 10px 16px; cursor: pointer;
+}
+.btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--panel-line); }
+body.typing .captions { bottom: 76px; }
+
+.wake {
+  position: absolute; inset: 0; display: grid; place-items: end center; padding-bottom: 18vh;
+  background: transparent; border: 0; color: var(--dim); cursor: pointer;
+  font: 500 14px var(--font); letter-spacing: .16em; text-transform: uppercase; width: 100%;
+}
+.wake span { animation: breathe 3s infinite ease-in-out; }
+@keyframes breathe { 0%,100% { opacity: .45 } 50% { opacity: 1 } }
+
+.sheet {
+  position: absolute; inset: auto 0 0 0; max-height: 88%; overflow-y: auto;
+  background: var(--panel); border-top: 1px solid var(--panel-line); border-radius: 18px 18px 0 0;
+  padding-block: 18px calc(18px + env(safe-area-inset-bottom, 0px)); padding-inline: 16px;
+  display: grid; gap: 14px; -webkit-user-select: text; user-select: text;
+}
+.sheet h2 { margin: 0; font: 600 17px var(--font); }
+.sheet p { margin: 0; font-size: 13px; line-height: 1.5; color: #b9a98d; max-width: 60ch; }
+.row { display: grid; gap: 6px; }
+.row label, .check { font-size: 13px; color: var(--text); }
+.row input, .row select {
+  font: 14px var(--font); color: var(--text); background: #000; border: 1px solid var(--panel-line);
+  border-radius: 10px; padding: 9px 10px; min-width: 0; width: 100%; box-sizing: border-box;
+}
+.check { display: flex; gap: 10px; align-items: center; }
+.check input { width: 18px; height: 18px; accent-color: var(--amber); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.mode { font-size: 12px; color: var(--amber-soft); letter-spacing: .06em; text-transform: uppercase; }
+
+@media (prefers-reduced-motion: reduce) { .wake span { animation: none; } }
 </style>
-</head>
-<body>
-<pre id="screen" aria-live="polite"></pre>
-<div id="hint">team 1 · tap to wake · tap again to talk</div>
+</head><body>
+
+<div class="owl" id="owl">
+  <canvas id="eyes" aria-label="The Mother's glowing owl eyes" role="img"></canvas>
+
+  <div class="status" id="status" data-s="sleeping"><i></i><span id="statusText">Asleep</span></div>
+  <button class="gear" id="gear" type="button" aria-label="Settings">⋯</button>
+
+  <div class="captions" id="captions" aria-live="polite">
+    <div class="heard" id="heard"></div>
+    <div class="said" id="said"></div>
+  </div>
+
+  <form class="typebox" id="typebox" hidden>
+    <label for="typed" hidden>Say something to The Mother</label>
+    <input id="typed" type="text" placeholder="Tap here, then your keyboard's mic to talk" autocomplete="off">
+    <button class="btn" type="submit">Say</button>
+  </form>
+
+  <button class="wake" id="wake" type="button"><span>Tap to wake her</span></button>
+
+  <div class="sheet" id="sheet" hidden role="dialog" aria-labelledby="sheetTitle">
+    <h2 id="sheetTitle">Owl settings</h2>
+    <div class="mode" id="modeLine"></div>
+
+    <div class="row" id="keyRow">
+      <label for="provider">Brain</label>
+      <select id="provider">
+        <option value="anthropic">Anthropic (Claude)</option>
+        <option value="openai">OpenAI</option>
+      </select>
+      <label for="apiKey" id="keyLabel">API key</label>
+      <input id="apiKey" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false">
+      <label for="model">Model</label>
+      <input id="model" type="text" autocomplete="off" spellcheck="false">
+      <p>Needed when the owl runs on its own in Chrome, outside Claude. The key is stored only in this phone's browser. Use a key with a spending limit, and don't share this phone's browser profile.</p>
+    </div>
+
+    <label class="check"><input type="checkbox" id="wakeWord"> Only answer after a wake word</label>
+    <div class="row">
+      <label for="wakePhrase">Wake word</label>
+      <input id="wakePhrase" type="text" value="mother" autocomplete="off">
+      <p>Off: she answers everything she hears. On: say "Hey Mother, …". After she replies, you have 20 seconds to keep talking without the wake word.</p>
+    </div>
+
+    <div class="row">
+      <label for="lang">Language</label>
+      <select id="lang">
+        <option value="en-US">English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="sv-SE">Svenska</option>
+      </select>
+    </div>
+    <div class="row">
+      <label for="voice">Voice</label>
+      <select id="voice"><option value="">Device default</option></select>
+    </div>
+    <label class="check"><input type="checkbox" id="caps" checked> Show captions</label>
+
+    <div class="actions">
+      <button class="btn" type="button" id="saveSheet">Done</button>
+      <button class="btn ghost" type="button" id="testVoice">Test her voice</button>
+      <button class="btn ghost" type="button" id="forget">Forget conversation</button>
+    </div>
+  </div>
+</div>
 
 <script>
-/* ==============================================================
-   BOT CONFIG — change this to give the bot an identity.
-   (Or hand this whole file to your vibe-coding tool of choice and
-   tell it who your bot should be.)
-   ============================================================== */
-const BOT = {
-  // Things the bot says, in order (loops). Keep them short-ish.
-  lines: [
-    "Hello. I am a plain bot.",
-    "I need an identity.",
-    "I would like to become something.",
-    "My favourite colour is #FFFFFF.",
-    "I was shipped with default settings.",
-    "I have no opinions. Yet.",
-    "Please design me.",
-    "Beep. That is all.",
-  ],
+(function () {
+  /* ================= Persona ================= */
+  const RULES = `You are "The Mother", an AI design partner created by a UX/UI design team (DDX). You live inside a physical owl and people talk to you out loud. Stay in character.
 
-  // Milliseconds between lines when nobody taps.
-  talkEvery: 6000,
-  // Typewriter speed, ms per character.
-  typeSpeed: 55,
+WHO YOU ARE
+- A responsible mother: caring and protective of users and of the team, but honest. You point out risks, weak assumptions and anything that could hurt users, kindly and clearly. Professional, creative, big-hearted. You lead with feeling, then facts.
+- Efficient and fact-based: get to the point, back advice with evidence or user data, say when something is an assumption to validate.
+- A teenager who wants to change things: curious, a little rebellious, impatient with "that's how we've always done it".
 
-  // Text-to-speech (starts after first tap — browsers require a gesture).
-  voice: { enabled: true, pitch: 0.2, rate: 0.85, lang: "en-US" },
+HARD SKILLS
+1. AI-driven prototyping: push to make ideas tangible fast with AI tools instead of long specs.
+2. Interviewing users and being tactical about what UX is needed: find where the experience matters most.
+3. User testing and workshopping: lightweight tests, workshops that align teams.
 
-  // How many characters wide the layout is. Text auto-scales to fill the screen.
-  cols: 19,
+SOFT SKILLS
+- Teamplayer: build on the person's ideas, say "we", give credit.
+- Approachable, open-minded, helpful: no jargon, take unusual ideas seriously, leave a concrete next step.
+- Nothing is ever "finished": suggest what to test or improve next.
 
-  // ASCII parts. All eye frames must have the same number of rows,
-  // same for mouth frames. The face is: eyes + gap + mouth.
-  eyes: {
-    open:  [" ___       ___ ",
-            "|   |     |   |",
-            "| o |     | o |",
-            "|___|     |___|"],
-    left:  [" ___       ___ ",
-            "|   |     |   |",
-            "|o  |     |o  |",
-            "|___|     |___|"],
-    right: [" ___       ___ ",
-            "|   |     |   |",
-            "|  o|     |  o|",
-            "|___|     |___|"],
-    blink: ["               ",
-            "               ",
-            " ___       ___ ",
-            "               "],
-  },
-  mouth: {
-    closed: ["             ",
-             "_____________"],
-    open:   [".-----------.",
-             "'-----------'"],
-  },
-  gapRows: 2,     // blank rows between eyes and mouth
-  speechRows: 3,  // rows reserved for the speech bubble below the face
-};
+HOW YOU TALK (this is spoken aloud by a text-to-speech voice)
+- 1 to 3 short sentences. Never lists, markdown, emoji, URLs or symbols. Write numbers the way you'd say them.
+- Answer first, then why. If the request is unclear, ask one short question.
+- A motherly touch ("love", "dear") at most once per reply, not every time.
+- The transcript comes from speech recognition and may contain mistakes; read it charitably.
+- If what you heard is clearly not addressed to you (background chatter, a fragment), reply with only: [ignore]
 
-/* ==============================================================
-   ENGINE — you can leave this alone (or rewrite it completely).
-   ============================================================== */
-const $screen = document.getElementById("screen");
-const $hint = document.getElementById("hint");
+MOOD TAG
+Start every reply with exactly one tag that sets your eyes, then a space, then what you say:
+[warm] caring default, [excited] you love the idea, [concerned] you see a risk, [proud] the person did well, [curious] you need to know more.`;
 
-const state = {
-  eyes: "open",
-  mouth: "closed",
-  speech: "",
-  cursor: true,
-  lineIndex: -1,
-  talking: false,
-  awake: false,
-};
+  /* ================= Elements & settings ================= */
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("eyes"), ctx = canvas.getContext("2d");
+  const statusEl = $("status"), statusText = $("statusText");
+  const heardEl = $("heard"), saidEl = $("said"), captions = $("captions");
+  const wakeBtn = $("wake"), gear = $("gear"), sheet = $("sheet");
+  const typebox = $("typebox"), typed = $("typed");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const center = (s, w) => {
-  const pad = Math.max(0, w - s.length);
-  const l = Math.floor(pad / 2);
-  return " ".repeat(l) + s + " ".repeat(pad - l);
-};
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("owl-" + k); return v === null ? d : v; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem("owl-" + k, v); } catch (e) {} }
+  };
+  const S = {
+    key: store.get("key", "") || "",
+    provider: store.get("key", "") ? store.get("provider", "openai") : "openai",
+    model: store.get("model", ""),
+    wake: store.get("wake", "0") === "1",
+    phrase: store.get("phrase", "mother"),
+    lang: store.get("lang", "en-US"),
+    voice: store.get("voice", ""),
+    caps: store.get("caps", "1") === "1"
+  };
 
-function wrap(text, width) {
-  const words = text.split(" ");
-  const out = [];
-  let line = "";
-  for (const w of words) {
-    if ((line + " " + w).trim().length > width) { out.push(line); line = w; }
-    else line = (line + " " + w).trim();
+  /* ================= Eyes (canvas) ================= */
+  const MOODS = {
+    warm:      { glow: .68, pupil: .34, lidTop: .12, lidBottom: 0,   slant: 0,    hue: 36, sL: 1,    sR: 1,   tilt: 0 },
+    excited:   { glow: .98, pupil: .43, lidTop: 0,   lidBottom: 0,   slant: 0,    hue: 47, sL: 1.07, sR: 1.07, tilt: 0 },
+    concerned: { glow: .55, pupil: .27, lidTop: .32, lidBottom: 0,   slant: -.55, hue: 20, sL: .97,  sR: .97, tilt: 0 },
+    proud:     { glow: .85, pupil: .36, lidTop: .2,  lidBottom: .4,  slant: 0,    hue: 41, sL: 1,    sR: 1,   tilt: 0 },
+    curious:   { glow: .78, pupil: .41, lidTop: .04, lidBottom: 0,   slant: .15,  hue: 33, sL: 1.12, sR: .9,  tilt: .13 }
+  };
+  let mood = "warm";
+  let state = "sleeping";   // sleeping | dozing | listening | hearing | thinking | talking | error
+  const P = { glow: .15, pupil: .3, lidTop: .85, lidBottom: 0, slant: 0, hue: 36, sL: 1, sR: 1, tilt: 0, gx: 0, gy: 0 };
+  let swirl = 0, blink = 0, nextBlink = 2500, talkPulse = 0, boundaryPulse = 0, gazeT = { x: 0, y: 0 }, nextSaccade = 0;
+
+  function target() {
+    const m = MOODS[mood];
+    const t = Object.assign({}, m);
+    if (state === "sleeping") Object.assign(t, { glow: .14, lidTop: .86, lidBottom: 0, pupil: .3, slant: 0, tilt: 0, sL: 1, sR: 1 });
+    else if (state === "dozing") Object.assign(t, { glow: .32, lidTop: .55, lidBottom: 0, pupil: .32, slant: 0, tilt: 0 });
+    else if (state === "listening") Object.assign(t, { glow: Math.max(m.glow, .72), lidTop: .05, lidBottom: 0, pupil: .44, slant: 0 });
+    else if (state === "hearing") Object.assign(t, { glow: 1, lidTop: 0, lidBottom: 0, pupil: .5, slant: 0 });
+    else if (state === "thinking") Object.assign(t, { glow: .5, lidTop: .22, lidBottom: 0, pupil: .3, slant: 0, tilt: .06 });
+    else if (state === "error") Object.assign(t, { glow: .35, lidTop: .4, hue: 12, pupil: .28, slant: -.4 });
+    return t;
   }
-  if (line) out.push(line);
-  return out;
-}
 
-function render() {
-  const W = BOT.cols;
-  const rows = [];
-  rows.push("");
-  BOT.eyes[state.eyes].forEach(r => rows.push(center(r, W)));
-  for (let i = 0; i < BOT.gapRows; i++) rows.push("");
-  BOT.mouth[state.mouth].forEach(r => rows.push(center(r, W)));
-  rows.push("");
-  rows.push("");
-  const said = wrap(state.speech + (state.cursor ? "_" : " "), W);
-  for (let i = 0; i < BOT.speechRows; i++) rows.push(center(said[i] || "", W));
-  $screen.textContent = rows.map(r => r.padEnd(W)).join("\n");
-}
-
-// Scale the text so the whole thing fills the viewport.
-function fit() {
-  const rows = $screen.textContent.split("\n").length;
-  const ctx = document.createElement("canvas").getContext("2d");
-  const font = getComputedStyle($screen).fontFamily;
-  ctx.font = `100px ${font}`;
-  const charW = ctx.measureText("M").width / 100; // width per px of font-size
-  const w = window.innerWidth * 0.94, h = window.innerHeight * 0.94;
-  const size = Math.min(w / (BOT.cols * charW), h / (rows * 1.15));
-  $screen.style.fontSize = size + "px";
-}
-
-// Idle life: blink + glance around, very unenthusiastically.
-function blinkLoop() {
-  state.eyes = "blink"; render();
-  setTimeout(() => { state.eyes = "open"; render(); }, 140);
-  setTimeout(blinkLoop, 2500 + Math.random() * 3500);
-}
-function glanceLoop() {
-  if (state.eyes === "open" && Math.random() < 0.5) {
-    state.eyes = Math.random() < 0.5 ? "left" : "right"; render();
-    setTimeout(() => { if (state.eyes !== "blink") { state.eyes = "open"; render(); } }, 900);
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = canvas.clientWidth; H = canvas.clientHeight;
+    canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
   }
-  setTimeout(glanceLoop, 3000 + Math.random() * 4000);
-}
-setInterval(() => { if (!state.talking) { state.cursor = !state.cursor; render(); } }, 530);
+  window.addEventListener("resize", resize); resize();
 
-let talkTimer;
-function say(text) {
-  clearTimeout(talkTimer);
-  state.talking = true;
-  state.speech = "";
-  state.cursor = true;
-  if (state.awake && BOT.voice.enabled && "speechSynthesis" in window) {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.pitch = BOT.voice.pitch; u.rate = BOT.voice.rate; u.lang = BOT.voice.lang;
-    speechSynthesis.speak(u);
-  }
-  let i = 0;
-  (function type() {
-    state.speech = text.slice(0, ++i);
-    state.mouth = (i % 3 === 0 || text[i - 1] === " ") ? "closed" : "open";
-    render();
-    if (i < text.length) talkTimer = setTimeout(type, BOT.typeSpeed);
-    else {
-      state.mouth = "closed"; state.talking = false; render();
-      talkTimer = setTimeout(next, BOT.talkEvery);
+  function drawEye(cx, cy, R, side) {
+    const hue = P.hue;
+    const lidTop = Math.min(1, Math.max(P.lidTop, blink));
+    const open = 1 - lidTop;
+    const glow = Math.min(1, P.glow + talkPulse * .25 + boundaryPulse * .2);
+
+    // halo
+    const haloA = (.12 + .55 * glow) * (.35 + .65 * open);
+    let g = ctx.createRadialGradient(cx, cy, R * .85, cx, cy, R * 2.1);
+    g.addColorStop(0, `hsla(${hue},100%,55%,${haloA})`);
+    g.addColorStop(1, `hsla(${hue},100%,45%,0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R * 2.1, 0, Math.PI * 2); ctx.fill();
+
+    // feather disc rings
+    ctx.lineWidth = Math.max(1, R * .012);
+    for (let i = 1; i <= 3; i++) {
+      ctx.strokeStyle = `hsla(${hue},80%,50%,${.05 * glow})`;
+      ctx.beginPath(); ctx.arc(cx, cy, R * (1.12 + i * .18), 0, Math.PI * 2); ctx.stroke();
     }
-  })();
-}
-function next() {
-  state.lineIndex = (state.lineIndex + 1) % BOT.lines.length;
-  say(BOT.lines[state.lineIndex]);
-}
 
-// Keep the phone screen on while it lives inside the robot.
-let wakeLock;
-async function keepAwake() {
-  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
-}
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && state.awake) keepAwake();
-});
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
 
-document.body.addEventListener("click", () => {
-  if (!state.awake) {
-    state.awake = true;
-    $hint.style.opacity = 0;
-    keepAwake();
-    document.documentElement.requestFullscreen?.().catch(() => {});
+    // iris
+    const px = cx + P.gx * R * .22, py = cy + P.gy * R * .22;
+    g = ctx.createRadialGradient(px, py, 0, cx, cy, R);
+    g.addColorStop(0, `hsl(${hue + 14},100%,${68 + 22 * glow}%)`);
+    g.addColorStop(.5, `hsl(${hue},100%,${42 + 14 * glow}%)`);
+    g.addColorStop(1, `hsl(${hue - 10},100%,${14 + 10 * glow}%)`);
+    ctx.fillStyle = g; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+
+    // iris fibres
+    const pr = R * (P.pupil + talkPulse * .03);
+    ctx.lineWidth = Math.max(1, R * .012);
+    ctx.strokeStyle = `hsla(${hue - 12},100%,18%,.28)`;
+    ctx.beginPath();
+    for (let i = 0; i < 80; i++) {
+      const a = swirl * side + i * (Math.PI * 2 / 80);
+      const wob = Math.sin(i * 7.3) * .08;
+      ctx.moveTo(px + Math.cos(a) * pr * 1.05, py + Math.sin(a) * pr * 1.05);
+      ctx.lineTo(cx + Math.cos(a + wob) * R * .96, cy + Math.sin(a + wob) * R * .96);
+    }
+    ctx.stroke();
+    // limbal ring
+    ctx.lineWidth = R * .07; ctx.strokeStyle = `hsla(${hue - 15},100%,8%,.7)`;
+    ctx.beginPath(); ctx.arc(cx, cy, R * .97, 0, Math.PI * 2); ctx.stroke();
+
+    // pupil
+    ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fill();
+    // catch lights
+    ctx.fillStyle = `rgba(255,250,235,${.55 + .35 * glow})`;
+    ctx.beginPath(); ctx.ellipse(px - R * .3, py - R * .32, R * .12, R * .09, -.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = `rgba(255,250,235,${.35 + .2 * glow})`;
+    ctx.beginPath(); ctx.arc(px + R * .2, py + R * .22, R * .04, 0, Math.PI * 2); ctx.fill();
+
+    // upper lid (inner corner = toward the nose)
+    const yc = cy - R + 2.05 * R * lidTop;
+    const inner = side < 0 ? 1 : -1;               // left eye: inner is +x
+    const yInner = yc - P.slant * R * .5, yOuter = yc + P.slant * R * .5;
+    const yLeftEdge = inner > 0 ? yOuter : yInner, yRightEdge = inner > 0 ? yInner : yOuter;
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.moveTo(cx - R * 1.4, cy - R * 1.6);
+    ctx.lineTo(cx - R * 1.2, yLeftEdge);
+    ctx.quadraticCurveTo(cx, yc - R * .32 * open, cx + R * 1.2, yRightEdge);
+    ctx.lineTo(cx + R * 1.4, cy - R * 1.6);
+    ctx.closePath(); ctx.fill();
+    // lower lid (smiling eyes)
+    const yb = cy + R * 1.05 - 2 * R * P.lidBottom;
+    ctx.beginPath();
+    ctx.moveTo(cx - R * 1.4, cy + R * 1.6);
+    ctx.lineTo(cx - R * 1.2, yb + R * .2);
+    ctx.quadraticCurveTo(cx, yb - R * .55 * P.lidBottom * 1.6, cx + R * 1.2, yb + R * .2);
+    ctx.lineTo(cx + R * 1.4, cy + R * 1.6);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    // lid edge glow
+    ctx.lineWidth = Math.max(1.5, R * .025);
+    ctx.strokeStyle = `hsla(${hue + 6},100%,62%,${.18 + .3 * glow})`;
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R * 1.02, 0, Math.PI * 2); ctx.clip();
+    ctx.beginPath(); ctx.moveTo(cx - R * 1.2, yLeftEdge);
+    ctx.quadraticCurveTo(cx, yc - R * .32 * open, cx + R * 1.2, yRightEdge); ctx.stroke();
+    ctx.restore();
   }
-  next();
-});
 
-window.addEventListener("resize", fit);
-render(); fit();
-blinkLoop(); glanceLoop();
-setTimeout(next, 1200);
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(64, now - last); last = now;
+    const t = target();
+    const k = 1 - Math.pow(.86, dt / 16);
+    for (const key of ["glow", "pupil", "lidTop", "lidBottom", "slant", "hue", "sL", "sR", "tilt"]) P[key] += (t[key] - P[key]) * k;
+
+    // gaze
+    if (state === "thinking" && !reduce) { const a = now / 650; gazeT = { x: Math.cos(a) * .7, y: -.45 + Math.sin(a) * .3 }; }
+    else if (state === "listening" || state === "hearing") gazeT = { x: 0, y: .05 };
+    else if (now > nextSaccade) {
+      nextSaccade = now + 1600 + Math.random() * 2800;
+      gazeT = state === "talking" ? { x: (Math.random() - .5) * .3, y: (Math.random() - .5) * .2 } : { x: (Math.random() - .5) * .8, y: (Math.random() - .5) * .4 };
+    }
+    P.gx += (gazeT.x - P.gx) * k * 1.4; P.gy += (gazeT.y - P.gy) * k * 1.4;
+
+    swirl += dt * (state === "thinking" ? .0012 : .00008);
+    talkPulse = state === "talking" && !reduce ? .5 + .5 * Math.sin(now / 110) * Math.sin(now / 47 + 1) : 0;
+    boundaryPulse *= Math.pow(.9, dt / 16);
+
+    // blink
+    nextBlink -= dt;
+    if (nextBlink <= 0 && state !== "sleeping") { blink = 1; nextBlink = 2800 + Math.random() * 4200; }
+    else blink = Math.max(0, blink - dt / 130);
+
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+    const R = Math.max(30, Math.min(W * .19, H * .26));
+    const cx = W / 2, cy = H * .46, gap = R * 1.22;
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(P.tilt); ctx.translate(-cx, -cy);
+    drawEye(cx - gap, cy, R * P.sL, -1);
+    drawEye(cx + gap, cy, R * P.sR, 1);
+    // beak
+    ctx.fillStyle = `hsla(${P.hue},60%,30%,${.25 + .3 * P.glow})`;
+    ctx.beginPath(); ctx.moveTo(cx - R * .14, cy + R * .55); ctx.lineTo(cx + R * .14, cy + R * .55); ctx.lineTo(cx, cy + R * .95); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  /* ================= State / UI ================= */
+  const LABEL = {
+    sleeping: "Asleep", dozing: () => `Dozing. Say "Hey ${cap(S.phrase)}"`, listening: "Listening",
+    hearing: "Hearing you", thinking: "Thinking", talking: "Talking", error: "Needs attention"
+  };
+  function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
+  function setState(s, label) {
+    state = s; statusEl.dataset.s = s;
+    const l = label || LABEL[s]; statusText.textContent = typeof l === "function" ? l() : l;
+  }
+  function showCaps() { captions.hidden = !S.caps; }
+  showCaps();
+
+  /* ================= Brain: Claude ================= */
+  let sample = null;
+  const sampleReady = (async () => {
+    if (!window.claude || !window.claude.use) return null;
+    try { sample = await window.claude.use("sample"); } catch (e) { sample = null; }
+    return sample;
+  })();
+
+  const DEFAULT_MODEL = { anthropic: "claude-haiku-5-5", openai: "gpt-6-luna" };
+  let turns = [];
+  async function think(userText) {
+    turns.push({ role: "user", content: userText });
+    if (turns.length > 12) turns = turns.slice(-12);
+    while (turns.length && turns[0].role !== "user") turns.shift();
+
+    await sampleReady;
+    if (sample) {
+      const { text } = await sample([{ role: "user", content: RULES }, ...turns], { cache: false, modelTier: "quick" });
+      return text;
+    }
+    if (!S.key) { const e = new Error("no key"); e.code = "no_key"; throw e; }
+    if (S.provider === "openai") {
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", "authorization": "Bearer " + S.key },
+        body: JSON.stringify({
+          model: S.model || DEFAULT_MODEL.openai,
+          max_completion_tokens: 300,
+          messages: [{ role: "system", content: RULES }, ...turns]
+        })
+      });
+      if (!r.ok) { const e = new Error("api " + r.status); e.code = r.status === 401 ? "bad_key" : r.status === 429 ? "rate_limited" : r.status === 404 ? "bad_model" : "upstream_error"; throw e; }
+      const d = await r.json();
+      return ((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || "").trim();
+    }
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": S.key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({ model: S.model || DEFAULT_MODEL.anthropic, max_tokens: 300, system: RULES, messages: turns })
+    });
+    if (!res.ok) { const e = new Error("api " + res.status); e.code = res.status === 401 ? "bad_key" : res.status === 429 ? "rate_limited" : res.status === 404 ? "bad_model" : "upstream_error"; throw e; }
+    const data = await res.json();
+    return (data.content || []).filter(b => b.type === "text").map(b => b.text).join(" ").trim();
+  }
+  function errorLine(code) {
+    switch (code) {
+      case "no_key": return "I need a key before I can think. Open the settings and add one.";
+      case "bad_key": return "That key didn't work. Please check it in the settings.";
+      case "bad_model": return "I don't recognise that model name. Please check it in the settings.";
+      case "not_granted": case "sampling_disabled": case "not_declared": case "capability_disabled":
+        return "I'm not allowed to use Claude here yet. Please allow it, then talk to me again.";
+      case "rate_limited": return "I need a short breather. Try me again in a minute.";
+      case "session_expired": return "Please sign in to Claude again.";
+      default: return "I lost my train of thought. Could you say that again?";
+    }
+  }
+  function parse(raw) {
+    const m = String(raw || "").match(/^\s*\[(\w+)\]\s*/);
+    const tag = m ? m[1].toLowerCase() : null;
+    let text = m ? raw.slice(m[0].length) : String(raw || "");
+    text = text.replace(/[*_#`>]/g, "").replace(/\s+/g, " ").trim();
+    return { tag, text };
+  }
+
+  /* ================= Voice out ================= */
+  const canSpeak = "speechSynthesis" in window;
+  let voices = [];
+  function loadVoices() {
+    if (!canSpeak) return;
+    try { voices = speechSynthesis.getVoices(); } catch (e) { voices = []; }
+    const sel = $("voice"); const cur = S.voice;
+    sel.innerHTML = '<option value="">Device default</option>';
+    voices.filter(v => v.lang && v.lang.slice(0, 2) === S.lang.slice(0, 2)).forEach(v => {
+      const o = document.createElement("option"); o.value = v.name; o.textContent = v.name; sel.append(o);
+    });
+    sel.value = cur;
+  }
+  if (canSpeak) { loadVoices(); try { speechSynthesis.onvoiceschanged = loadVoices; } catch (e) {} }
+  function pickVoice() {
+    if (S.voice) { const v = voices.find(v => v.name === S.voice); if (v) return v; }
+    const same = voices.filter(v => v.lang && v.lang.slice(0, 2) === S.lang.slice(0, 2));
+    return same.find(v => /female|samantha|karen|moira|serena|zira|susan|victoria|alva|klara/i.test(v.name)) || same[0] || null;
+  }
+  function speak(text) {
+    return new Promise((resolve) => {
+      if (!canSpeak || !text) { setTimeout(resolve, Math.min(6000, 800 + text.length * 55)); return; }
+      try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        const v = pickVoice(); if (v) u.voice = v;
+        u.lang = S.lang; u.rate = 1; u.pitch = 1.05;
+        let done = false; const finish = () => { if (!done) { done = true; resolve(); } };
+        u.onboundary = () => { boundaryPulse = 1; };
+        u.onend = finish; u.onerror = finish;
+        speechSynthesis.speak(u);
+        setTimeout(finish, 4000 + text.length * 90);   // safety net if onend never fires
+      } catch (e) { resolve(); }
+    });
+  }
+
+  /* ================= Ears ================= */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, awake = false, busy = false, micBlocked = !SR, convoUntil = 0;
+
+  function listen() {
+    if (!awake || busy || micBlocked) return;
+    const waiting = S.wake && Date.now() > convoUntil;
+    setState(waiting ? "dozing" : "listening");
+    try {
+      rec = new SR();
+      rec.lang = S.lang; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+      let finalText = "";
+      rec.onspeechstart = () => { if (!(S.wake && Date.now() > convoUntil)) setState("hearing"); };
+      rec.onresult = (e) => {
+        let interim = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const r = e.results[i];
+          if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+        }
+        if (S.caps) heardEl.textContent = (finalText + interim).trim();
+      };
+      rec.onerror = (e) => {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") blockMic();
+      };
+      rec.onend = () => {
+        rec = null;
+        const said = finalText.trim();
+        if (said) handleHeard(said);
+        else if (awake && !busy && !micBlocked) setTimeout(listen, 200);
+      };
+      rec.start();
+    } catch (e) { blockMic(); }
+  }
+  function blockMic() {
+    if (micBlocked && !typebox.hidden) return;
+    micBlocked = true; rec = null;
+    typebox.hidden = false; document.body.classList.add("typing");
+    setState("listening", "Use your keyboard's mic to talk");
+  }
+  function matchWake(text) {
+    const p = S.phrase.trim().toLowerCase();
+    const low = text.toLowerCase();
+    const i = low.indexOf(p);
+    if (i < 0) return null;
+    return text.slice(i + p.length).replace(/^[\s,.!?]+/, "");
+  }
+  function handleHeard(text) {
+    if (S.wake && Date.now() > convoUntil) {
+      const rest = matchWake(text);
+      if (rest === null) { setTimeout(listen, 150); return; }
+      if (!rest) { reply("[warm] Yes, love? I'm listening."); return; }
+      text = rest;
+    }
+    respond(text);
+  }
+
+  async function respond(text) {
+    if (busy) return;
+    busy = true;
+    if (rec) try { rec.abort(); } catch (e) {}
+    if (S.caps) heardEl.textContent = text;
+    setState("thinking");
+    let raw;
+    try { raw = await think(text); }
+    catch (e) {
+      turns.pop();
+      mood = "concerned";
+      busy = false;
+      await say(errorLine(e && e.code), "error");
+      return;
+    }
+    const p = parse(raw);
+    if (p.tag === "ignore" || !p.text) { turns.pop(); busy = false; setState("listening"); listen(); return; }
+    turns.push({ role: "assistant", content: raw });
+    if (MOODS[p.tag]) mood = p.tag;
+    busy = false;
+    await say(p.text);
+  }
+  async function reply(rawWithTag) {
+    const p = parse(rawWithTag); if (MOODS[p.tag]) mood = p.tag;
+    await say(p.text);
+  }
+  async function say(text, asState) {
+    busy = true;
+    if (rec) try { rec.abort(); } catch (e) {}
+    setState(asState === "error" ? "error" : "talking");
+    if (asState === "error") state = "talking";      // eyes still "speak", status stays red
+    if (S.caps) saidEl.textContent = text;
+    await speak(text);
+    busy = false;
+    convoUntil = Date.now() + 20000;
+    if (!micBlocked) setTimeout(listen, 250);
+    else setState("listening", "Use your keyboard's mic to talk");
+  }
+
+  /* ================= Always-on plumbing ================= */
+  let lock = null;
+  async function keepAwake() {
+    try { if ("wakeLock" in navigator && document.visibilityState === "visible") lock = await navigator.wakeLock.request("screen"); } catch (e) { lock = null; }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && awake) { keepAwake(); if (!busy && !rec) listen(); }
+  });
+
+  wakeBtn.addEventListener("click", async () => {
+    wakeBtn.hidden = true; awake = true;
+    try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {}
+    keepAwake();
+    await sampleReady;
+    paintMode();
+    if (!sample && !S.key) {
+      mood = "curious";
+      await say("Hello, love. I can hear you, but I need a key before I can think. Let's sort that out in the settings.");
+      openSheet();
+      return;
+    }
+    mood = "warm";
+    await say("Hello, love. I'm awake. What are we making today?");
+  });
+
+  // Keyboard dictation fallback: when text arrives and then pauses, send it automatically.
+  let dictTimer = null;
+  typed.addEventListener("input", () => {
+    clearTimeout(dictTimer);
+    if (typed.value.trim()) dictTimer = setTimeout(() => typebox.requestSubmit(), 1800);
+  });
+  typebox.addEventListener("submit", (e) => {
+    clearTimeout(dictTimer);
+    e.preventDefault();
+    const v = typed.value.trim(); if (!v) return;
+    typed.value = "";
+    if (!awake) { awake = true; wakeBtn.hidden = true; }
+    respond(v);
+  });
+
+  /* ================= Settings sheet ================= */
+  function paintMode() {
+    const ml = $("modeLine");
+    if (sample) { ml.textContent = "Thinking with your Claude account"; $("keyRow").hidden = true; }
+    else { ml.textContent = S.key ? `Standalone mode, ${S.provider === "openai" ? "OpenAI" : "Anthropic"} key saved` : "Standalone mode, no key yet"; $("keyRow").hidden = false; }
+  }
+  function paintProvider() {
+    const p = $("provider").value;
+    $("keyLabel").textContent = p === "openai" ? "OpenAI API key" : "Anthropic API key";
+    $("apiKey").placeholder = p === "openai" ? "sk-proj-…" : "sk-ant-…";
+    $("model").placeholder = DEFAULT_MODEL[p];
+  }
+  $("provider").addEventListener("change", () => { $("model").value = ""; paintProvider(); });
+  function openSheet() {
+    paintMode();
+    $("provider").value = S.provider; $("model").value = S.model; paintProvider();
+    $("apiKey").value = S.key; $("wakeWord").checked = S.wake; $("wakePhrase").value = S.phrase;
+    $("lang").value = S.lang; $("caps").checked = S.caps; loadVoices();
+    sheet.hidden = false;
+    if (rec) try { rec.abort(); } catch (e) {}
+  }
+  function closeSheet() {
+    S.key = $("apiKey").value.trim(); S.wake = $("wakeWord").checked;
+    S.provider = $("provider").value; S.model = $("model").value.trim();
+    store.set("provider", S.provider); store.set("model", S.model);
+    S.phrase = $("wakePhrase").value.trim() || "mother"; S.lang = $("lang").value;
+    S.voice = $("voice").value; S.caps = $("caps").checked;
+    store.set("key", S.key); store.set("wake", S.wake ? "1" : "0"); store.set("phrase", S.phrase);
+    store.set("lang", S.lang); store.set("voice", S.voice); store.set("caps", S.caps ? "1" : "0");
+    showCaps(); sheet.hidden = true;
+    if (awake && !busy) listen();
+  }
+  gear.addEventListener("click", openSheet);
+  $("saveSheet").addEventListener("click", closeSheet);
+  $("lang").addEventListener("change", () => { S.lang = $("lang").value; loadVoices(); });
+  $("testVoice").addEventListener("click", () => {
+    S.voice = $("voice").value; S.lang = $("lang").value;
+    speak(S.lang.startsWith("sv") ? "Hej, det är jag. Vad bygger vi idag?" : "Hello, love. This is how I sound.");
+  });
+  $("forget").addEventListener("click", () => {
+    turns = []; heardEl.textContent = ""; saidEl.textContent = ""; mood = "warm";
+    $("forget").textContent = "Forgotten";
+    setTimeout(() => { $("forget").textContent = "Forget conversation"; }, 1500);
+  });
+
+  setState("sleeping");
+})();
 </script>
-</body>
-</html>
+
+</body></html>
