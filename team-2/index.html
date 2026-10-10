@@ -2,246 +2,198 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#000000">
-<title>Plain Bot</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gandalf the Orange</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Newsreader:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
 <style>
-  /* ============================================================
-     DDX BOT — STARTER FACE
-     Everything you probably want to change is in the BOT config
-     in the <script> below. Styling lives here.
-     ============================================================ */
   :root {
-    --bg: #000;
-    --fg: #d8d8d8;
-    --dim: #555;
-    --font: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
+    --bg: #d9dcdf;
+    --ink: #2b3038;
+    --dim: #8b939c;
+    --accent: #c4560a;
+    --chip: #cbd0d4;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body {
-    height: 100%;
-    background: var(--bg);
-    color: var(--fg);
-    overflow: hidden;
-    overscroll-behavior: none;
-    -webkit-user-select: none; user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1e2227; --ink: #d8dce0; --dim: #5a626b; --accent: #ff9a4d; --chip: #2a3037;
+    }
   }
+  :root[data-theme="dark"] {
+    --bg: #1e2227; --ink: #d8dce0; --dim: #5a626b; --accent: #ff9a4d; --chip: #2a3037;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
   body {
-    display: grid;
-    place-items: center;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right)
-             env(safe-area-inset-bottom) env(safe-area-inset-left);
-    cursor: pointer;
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Newsreader", Georgia, "Times New Roman", serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1.25rem 2.5rem;
   }
-  #screen {
-    font-family: var(--font);
+  main { width: 100%; max-width: 40rem; display: flex; flex-direction: column; align-items: center; }
+  .mouth-wrap { overflow-x: auto; max-width: 100%; }
+  pre#mouth {
+    margin: 0;
+    font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: min(18px, calc((100vw - 2.5rem) / 24.5));
     line-height: 1.15;
+    height: calc(8 * 1.15em);
+    color: var(--ink);
     white-space: pre;
-    letter-spacing: 0;
+    transition: text-shadow .15s;
   }
-  #hint {
-    position: fixed; left: 0; right: 0; bottom: max(12px, env(safe-area-inset-bottom));
-    text-align: center; font: 12px var(--font); color: var(--dim);
-    transition: opacity .6s;
+  pre#mouth i { font-style: normal; color: var(--dim); }
+  pre#mouth.speaking { text-shadow: 0 0 .6em color-mix(in srgb, var(--accent) 55%, transparent); }
+  pre#mouth.speaking b { color: var(--accent); font-weight: 700; }
+  pre#mouth b { font-weight: 400; }
+
+  .speech {
+    margin: 2rem 0 1.75rem;
+    min-height: 7.5rem;
+    width: 100%;
+    max-width: 34rem;
+    font-size: 1.35rem;
+    line-height: 1.45;
+    font-style: italic;
+    text-align: left;
   }
+  .speech .caret { display: inline-block; width: .5ch; border-bottom: 2px solid var(--accent); margin-left: 2px; }
+
+  nav { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; }
+  button {
+    font: inherit;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: .8rem;
+    color: var(--ink);
+    background: var(--chip);
+    border: 1px solid var(--dim);
+    border-radius: 999px;
+    padding: .55rem .95rem;
+    cursor: pointer;
+    min-height: 2.5rem;
+  }
+  button:hover { border-color: var(--accent); }
+  button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>
 </head>
 <body>
-<pre id="screen" aria-live="polite"></pre>
-<div id="hint">team 2 · tap to wake · tap again to talk</div>
+<main>
+  <div class="mouth-wrap"><pre id="mouth" aria-hidden="true"></pre></div>
+  <p class="speech" id="speech" aria-live="polite"></p>
+  <nav id="nav" aria-label="Topics"></nav>
+</main>
 
 <script>
-/* ==============================================================
-   BOT CONFIG — change this to give the bot an identity.
-   (Or hand this whole file to your vibe-coding tool of choice and
-   tell it who your bot should be.)
-   ============================================================== */
-const BOT = {
-  // Things the bot says, in order (loops). Keep them short-ish.
-  lines: [
-    "Hello. I am a plain bot.",
-    "I need an identity.",
-    "I would like to become something.",
-    "My favourite colour is #FFFFFF.",
-    "I was shipped with default settings.",
-    "I have no opinions. Yet.",
-    "Please design me.",
-    "Beep. That is all.",
-  ],
+(function () {
+  var W = 35;
+  var mouthEl = document.getElementById('mouth');
+  var speechEl = document.getElementById('speech');
+  var navEl = document.getElementById('nav');
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Milliseconds between lines when nobody taps.
-  talkEvery: 6000,
-  // Typewriter speed, ms per character.
-  typeSpeed: 55,
-
-  // Text-to-speech (starts after first tap — browsers require a gesture).
-  voice: { enabled: true, pitch: 0.2, rate: 0.85, lang: "en-US" },
-
-  // How many characters wide the layout is. Text auto-scales to fill the screen.
-  cols: 19,
-
-  // ASCII parts. All eye frames must have the same number of rows,
-  // same for mouth frames. The face is: eyes + gap + mouth.
-  eyes: {
-    open:  [" ___       ___ ",
-            "|   |     |   |",
-            "| o |     | o |",
-            "|___|     |___|"],
-    left:  [" ___       ___ ",
-            "|   |     |   |",
-            "|o  |     |o  |",
-            "|___|     |___|"],
-    right: [" ___       ___ ",
-            "|   |     |   |",
-            "|  o|     |  o|",
-            "|___|     |___|"],
-    blink: ["               ",
-            "               ",
-            " ___       ___ ",
-            "               "],
-  },
-  mouth: {
-    closed: ["             ",
-             "_____________"],
-    open:   [".-----------.",
-             "'-----------'"],
-  },
-  gapRows: 2,     // blank rows between eyes and mouth
-  speechRows: 3,  // rows reserved for the speech bubble below the face
-};
-
-/* ==============================================================
-   ENGINE — you can leave this alone (or rewrite it completely).
-   ============================================================== */
-const $screen = document.getElementById("screen");
-const $hint = document.getElementById("hint");
-
-const state = {
-  eyes: "open",
-  mouth: "closed",
-  speech: "",
-  cursor: true,
-  lineIndex: -1,
-  talking: false,
-  awake: false,
-};
-
-const center = (s, w) => {
-  const pad = Math.max(0, w - s.length);
-  const l = Math.floor(pad / 2);
-  return " ".repeat(l) + s + " ".repeat(pad - l);
-};
-
-function wrap(text, width) {
-  const words = text.split(" ");
-  const out = [];
-  let line = "";
-  for (const w of words) {
-    if ((line + " " + w).trim().length > width) { out.push(line); line = w; }
-    else line = (line + " " + w).trim();
+  function teeth() {
+    var s = ' ';
+    for (var i = 0; i < 11; i++) s += '[_]';
+    return s + ' ';
   }
-  if (line) out.push(line);
-  return out;
-}
-
-function render() {
-  const W = BOT.cols;
-  const rows = [];
-  rows.push("");
-  BOT.eyes[state.eyes].forEach(r => rows.push(center(r, W)));
-  for (let i = 0; i < BOT.gapRows; i++) rows.push("");
-  BOT.mouth[state.mouth].forEach(r => rows.push(center(r, W)));
-  rows.push("");
-  rows.push("");
-  const said = wrap(state.speech + (state.cursor ? "_" : " "), W);
-  for (let i = 0; i < BOT.speechRows; i++) rows.push(center(said[i] || "", W));
-  $screen.textContent = rows.map(r => r.padEnd(W)).join("\n");
-}
-
-// Scale the text so the whole thing fills the viewport.
-function fit() {
-  const rows = $screen.textContent.split("\n").length;
-  const ctx = document.createElement("canvas").getContext("2d");
-  const font = getComputedStyle($screen).fontFamily;
-  ctx.font = `100px ${font}`;
-  const charW = ctx.measureText("M").width / 100; // width per px of font-size
-  const w = window.innerWidth * 0.94, h = window.innerHeight * 0.94;
-  const size = Math.min(w / (BOT.cols * charW), h / (rows * 1.15));
-  $screen.style.fontSize = size + "px";
-}
-
-// Idle life: blink + glance around, very unenthusiastically.
-function blinkLoop() {
-  state.eyes = "blink"; render();
-  setTimeout(() => { state.eyes = "open"; render(); }, 140);
-  setTimeout(blinkLoop, 2500 + Math.random() * 3500);
-}
-function glanceLoop() {
-  if (state.eyes === "open" && Math.random() < 0.5) {
-    state.eyes = Math.random() < 0.5 ? "left" : "right"; render();
-    setTimeout(() => { if (state.eyes !== "blink") { state.eyes = "open"; render(); } }, 900);
+  function gap(r) {
+    var base = r % 2 === 0 ? ': ' : ' :';
+    return base.repeat(18).slice(0, W);
   }
-  setTimeout(glanceLoop, 3000 + Math.random() * 4000);
-}
-setInterval(() => { if (!state.talking) { state.cursor = !state.cursor; render(); } }, 530);
-
-let talkTimer;
-function say(text) {
-  clearTimeout(talkTimer);
-  state.talking = true;
-  state.speech = "";
-  state.cursor = true;
-  if (state.awake && BOT.voice.enabled && "speechSynthesis" in window) {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.pitch = BOT.voice.pitch; u.rate = BOT.voice.rate; u.lang = BOT.voice.lang;
-    speechSynthesis.speak(u);
+  function frame(o) {
+    var rows = [];
+    rows.push("  ." + "-".repeat(W) + ".");
+    rows.push("o |<b>" + teeth() + "</b>| o");
+    for (var r = 0; r < o; r++) rows.push("  |<i>" + gap(r) + "</i>|");
+    rows.push("o |<b>" + teeth() + "</b>| o");
+    rows.push("  '" + "-".repeat(W) + "'");
+    mouthEl.innerHTML = rows.join("\n");
   }
-  let i = 0;
-  (function type() {
-    state.speech = text.slice(0, ++i);
-    state.mouth = (i % 3 === 0 || text[i - 1] === " ") ? "closed" : "open";
-    render();
-    if (i < text.length) talkTimer = setTimeout(type, BOT.typeSpeed);
-    else {
-      state.mouth = "closed"; state.talking = false; render();
-      talkTimer = setTimeout(next, BOT.talkEvery);
+
+  function openness(ch) {
+    var c = ch.toLowerCase();
+    if ("aeoåäö".indexOf(c) > -1) return 4;
+    if ("iuy".indexOf(c) > -1) return 2;
+    if (/[a-z]/.test(c)) return 1;
+    return 0;
+  }
+
+  var lines = [
+    { label: "Who are you?", text: "I am Gandalf the Orange, a wizard of the orange kind. I am never late, nor early. I arrive precisely when the problem has been properly defined." },
+    { label: "Curiosity", text: "Ask the strange question first. The obvious answer will wait for you; it always does." },
+    { label: "Energy", text: "Bring a spark into the fellowship. A room with energy solves problems that a quiet room merely files." },
+    { label: "Challenge", text: "\u201CWe have always done it this way\u201D is not a reason. It is a symptom. Let us poke it." },
+    { label: "See and do", text: "Sketch it. Show it. Break it. Sketch it again. We learn by seeing what we did, then doing it better." },
+    { label: "The problem", text: "Before the solution: what is the problem, for whom, and what does a good day look like for the end customer?" },
+    { label: "Confession", text: "In quiet hours I draw seahorses with long, pastel manes. Do not tell the client." }
+  ];
+
+  var timer = null;
+  var current = -1;
+
+  function stop() { if (timer) { clearTimeout(timer); timer = null; } }
+
+  function setActive(i) {
+    current = i;
+    Array.prototype.forEach.call(navEl.children, function (b, idx) {
+      b.setAttribute('aria-pressed', idx === i ? 'true' : 'false');
+    });
+  }
+
+  function speak(i) {
+    stop();
+    setActive(i);
+    var text = lines[i].text;
+    if (reduce) {
+      speechEl.textContent = text;
+      frame(0);
+      return;
     }
-  })();
-}
-function next() {
-  state.lineIndex = (state.lineIndex + 1) % BOT.lines.length;
-  say(BOT.lines[state.lineIndex]);
-}
-
-// Keep the phone screen on while it lives inside the robot.
-let wakeLock;
-async function keepAwake() {
-  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}
-}
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && state.awake) keepAwake();
-});
-
-document.body.addEventListener("click", () => {
-  if (!state.awake) {
-    state.awake = true;
-    $hint.style.opacity = 0;
-    keepAwake();
-    document.documentElement.requestFullscreen?.().catch(() => {});
+    var n = 0;
+    mouthEl.classList.add('speaking');
+    (function step() {
+      n++;
+      speechEl.innerHTML = '';
+      speechEl.appendChild(document.createTextNode(text.slice(0, n)));
+      var caret = document.createElement('span');
+      caret.className = 'caret';
+      speechEl.appendChild(caret);
+      frame(openness(text.charAt(n - 1)));
+      if (n < text.length) {
+        timer = setTimeout(step, 48);
+      } else {
+        timer = setTimeout(function () {
+          frame(0);
+          mouthEl.classList.remove('speaking');
+          speechEl.textContent = text;
+        }, 160);
+      }
+    })();
   }
-  next();
-});
 
-window.addEventListener("resize", fit);
-render(); fit();
-blinkLoop(); glanceLoop();
-setTimeout(next, 1200);
+  lines.forEach(function (l, i) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = l.label;
+    b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', function () { speak(i); });
+    navEl.appendChild(b);
+  });
+
+  frame(0);
+  setTimeout(function () { speak(0); }, reduce ? 0 : 500);
+})();
 </script>
 </body>
 </html>
